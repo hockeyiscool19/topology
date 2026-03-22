@@ -1,0 +1,5 @@
+outputs/
+uv.lock
+*.tif
+__pycache__/
+cache_
