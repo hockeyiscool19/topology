@@ -516,8 +516,13 @@ def export_state_contours_svg(
             nodata_f = None
         if nodata_f is not None and np.isfinite(nodata_f):
             z = np.where(np.isclose(z, nodata_f), np.nan, z)
-    zmin = np.nanmin(z)
-    zmax = np.nanmax(z)
+
+    valid = np.isfinite(z)
+    if not np.any(valid):
+        raise ValueError("DEM contains no finite elevation values")
+
+    zmin = float(np.min(z[valid]))
+    zmax = float(np.max(z[valid]))
     if not np.isfinite(zmin) or not np.isfinite(zmax) or zmax <= zmin:
         raise ValueError("DEM has invalid elevation range")
 
@@ -641,45 +646,55 @@ def export_state_contours_svg(
             if depth_marks[-1] < float(max_cut_in) - 1e-9:
                 depth_marks.append(float(max_cut_in))
 
-            if len(depth_marks) >= 2:
-                elev_thr = _elevation_from_depth_in(depth_marks[1], float(zmin), float(zmax), float(max_depth_in))
-                lowlands = _pocket_region_below_threshold(z0, xs, ys, elev_thr)
-                high_band = poly_target if lowlands is None else poly_target.difference(lowlands)
-                if high_band is not None and (not high_band.is_empty):
-                    minx, miny, _, _ = poly_target.bounds
-                    hb_scaled = affinity.scale(high_band, xfact=scale, yfact=scale, origin=(minx, miny))
-                    hb_scaled = affinity.translate(hb_scaled, xoff=xoff, yoff=yoff)
-                    hb_flipped = affinity.scale(hb_scaled, xfact=1.0, yfact=-1.0, origin=(0.0, 0.0))
-                    hb_flipped = affinity.translate(hb_flipped, xoff=0.0, yoff=svg_h_m)
-                    layers[0.0] = _geom_to_svg_paths_filled(hb_flipped)
-                else:
-                    layers.setdefault(0.0, [])
-            else:
-                layers.setdefault(0.0, [])
-
+            print("Elevation bands (pockets mode):")
             prev_depth = 0.0
-            for depth_q in depth_marks[1:]:
+            for depth_q in depth_marks[1:-1]:
                 elev_high = _elevation_from_depth_in(prev_depth, float(zmin), float(zmax), float(max_depth_in))
                 elev_low = _elevation_from_depth_in(float(depth_q), float(zmin), float(zmax), float(max_depth_in))
-                pocket_m = _pocket_region_in_band(z0, xs, ys, elev_low_m=elev_low, elev_high_m=elev_high)
-                if pocket_m is None or pocket_m.is_empty:
-                    layers.setdefault(float(depth_q), [])
-                    prev_depth = float(depth_q)
-                    continue
-                pocket_m = pocket_m.intersection(poly_target)
-                if pocket_m.is_empty:
-                    layers.setdefault(float(depth_q), [])
-                    prev_depth = float(depth_q)
-                    continue
-
-                minx, miny, _, _ = poly_target.bounds
-                pocket_scaled = affinity.scale(pocket_m, xfact=scale, yfact=scale, origin=(minx, miny))
-                pocket_scaled = affinity.translate(pocket_scaled, xoff=xoff, yoff=yoff)
-                pocket_flipped = affinity.scale(pocket_scaled, xfact=1.0, yfact=-1.0, origin=(0.0, 0.0))
-                pocket_flipped = affinity.translate(pocket_flipped, xoff=0.0, yoff=svg_h_m)
-
-                layers[float(depth_q)] = _geom_to_svg_paths_filled(pocket_flipped)
+                z_code = int(round(float(depth_q) * 10000.0))
+                print(
+                    f"  z{z_code:04d}: depth_in={float(depth_q):.4f} elev_m=({float(elev_low):.3f}, {float(elev_high):.3f}]"
+                )
                 prev_depth = float(depth_q)
+            if len(depth_marks) >= 2:
+                last_depth = float(depth_marks[-1])
+                z_code = int(round(last_depth * 10000.0))
+                elev_last = _elevation_from_depth_in(last_depth, float(zmin), float(zmax), float(max_depth_in))
+                print(f"  z{z_code:04d}: depth_in={last_depth:.4f} elev_m=(-inf, {float(elev_last):.3f}] (remaining area)")
+
+            def _to_svg_layer(geom_m):
+                if geom_m is None or geom_m.is_empty:
+                    return []
+                minx, miny, _, _ = poly_target.bounds
+                g_scaled = affinity.scale(geom_m, xfact=scale, yfact=scale, origin=(minx, miny))
+                g_scaled = affinity.translate(g_scaled, xoff=xoff, yoff=yoff)
+                g_flipped = affinity.scale(g_scaled, xfact=1.0, yfact=-1.0, origin=(0.0, 0.0))
+                g_flipped = affinity.translate(g_flipped, xoff=0.0, yoff=svg_h_m)
+                return _geom_to_svg_paths_filled(g_flipped)
+
+            band_geoms: List[Polygon] = []
+            prev_depth = 0.0
+            for depth_q in depth_marks[1:-1]:
+                elev_high = _elevation_from_depth_in(prev_depth, float(zmin), float(zmax), float(max_depth_in))
+                elev_low = _elevation_from_depth_in(float(depth_q), float(zmin), float(zmax), float(max_depth_in))
+
+                band_m = _pocket_region_in_band(z, xs, ys, elev_low_m=elev_low, elev_high_m=elev_high)
+                if band_m is not None and (not band_m.is_empty):
+                    band_m = band_m.intersection(poly_target)
+                    if (not band_m.is_empty) and (not band_m.is_valid):
+                        band_m = band_m.buffer(0)
+                    if band_m is not None and (not band_m.is_empty):
+                        band_geoms.append(band_m)
+                layers[float(depth_q)] = _to_svg_layer(band_m)
+                prev_depth = float(depth_q)
+
+            if len(depth_marks) >= 2:
+                last_depth = float(depth_marks[-1])
+                covered = unary_union(band_geoms) if band_geoms else None
+                remaining_m = poly_target if covered is None else poly_target.difference(covered)
+                if remaining_m is not None and (not remaining_m.is_empty) and (not remaining_m.is_valid):
+                    remaining_m = remaining_m.buffer(0)
+                layers[last_depth] = _to_svg_layer(remaining_m)
 
     out_paths: List[str] = []
     deepest_depth_q = max(layers.keys()) if layers else None
