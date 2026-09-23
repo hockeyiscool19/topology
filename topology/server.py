@@ -14,11 +14,14 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from topology import boundary
 from topology.config import JobSpec
@@ -26,6 +29,54 @@ from topology.pipeline import JobResult, run_job
 
 WEB_DIST = Path(os.environ.get("TOPOLOGY_WEB_DIST", Path(__file__).resolve().parent.parent / "web" / "dist"))
 MAX_JOBS = 24
+# Where the eisensoftware platform (Firebase Hosting rewrite /topology{,/**}) mounts this app.
+PLATFORM_PREFIX = "/topology"
+
+
+class PrefixMiddleware:
+    """Serve one deployment both at "/" and under ``prefix``.
+
+    The platform's Hosting rewrite forwards the full path ("/topology/api/states"). Those requests get
+    ``root_path=prefix``; ``path`` keeps the prefix as the ASGI spec requires, and Starlette strips
+    ``root_path`` when routing, so every route and the static frontend answer under both bases.
+    "/topology" redirects to "topology/" so the frontend's relative asset and API URLs resolve under it.
+
+    Redirects stay relative. Behind Hosting, ``Host`` is Cloud Run's own host and the scheme is http, so an
+    absolute ``Location`` back to this server (Starlette builds those from ``Host``) is cut down to its path.
+    """
+
+    def __init__(self, app: ASGIApp, prefix: str = PLATFORM_PREFIX) -> None:
+        self.app = app
+        self.prefix = "/" + prefix.strip("/")
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        base = scope.get("root_path", "") + self.prefix
+        if scope["path"] == base:
+            query = scope.get("query_string", b"").decode("latin-1")
+            # Relative to ".../topology", "topology/" is ".../topology/" whatever the public host or mount.
+            location = self.prefix.rsplit("/", 1)[1] + "/" + (f"?{query}" if query else "")
+            await RedirectResponse(location)(scope, receive, send)
+            return
+        if scope["path"].startswith(base + "/"):
+            scope = {**scope, "root_path": base}
+        await self.app(scope, receive, _relative_redirects(scope, send))
+
+
+def _relative_redirects(scope: Scope, send: Send) -> Send:
+    host = (Headers(scope=scope).get("host") or "").lower()
+
+    async def send_relative(message: Message) -> None:
+        if message["type"] == "http.response.start" and 300 <= message["status"] < 400 and host:
+            headers = MutableHeaders(scope=message)
+            url = urlsplit(headers.get("location", ""))
+            if url.scheme in ("http", "https") and url.netloc.lower() == host:
+                headers["location"] = urlunsplit(("", "", url.path or "/", url.query, url.fragment))
+        await send(message)
+
+    return send_relative
 
 
 @dataclass
@@ -110,6 +161,7 @@ class JobStore:
 def create_app() -> FastAPI:
     app = FastAPI(title="Topology", version="1.0")
     app.add_middleware(GZipMiddleware, minimum_size=2048)
+    app.add_middleware(PrefixMiddleware, prefix=PLATFORM_PREFIX)  # outermost: runs before routing
     store = JobStore()
 
     @app.get("/api/health")

@@ -75,6 +75,12 @@ export const DEFAULT_LAYERS: LayerSpec = {
   surround: "raised",
 };
 
+/**
+ * API URL relative to the page, never "/api/...": the app is served at "/" and under "/topology/",
+ * and a relative URL resolves against whichever base the page was loaded from.
+ */
+export const apiUrl = (path: string) => `api/${path}`;
+
 async function json<T>(r: Response): Promise<T> {
   if (!r.ok) {
     let msg = `${r.status} ${r.statusText}`;
@@ -90,7 +96,7 @@ async function json<T>(r: Response): Promise<T> {
 }
 
 export function fetchStates(): Promise<GeoJSON.FeatureCollection> {
-  return fetch("/api/states").then((r) => json<GeoJSON.FeatureCollection>(r));
+  return fetch(apiUrl("states")).then((r) => json<GeoJSON.FeatureCollection>(r));
 }
 
 /** Submit a job and poll until it finishes. Resolves with the final state; rejects on abort. */
@@ -106,7 +112,7 @@ export async function runJob(
       ? { state: region.usps, board, layers }
       : { geojson: region.geojson, name: region.label, board, layers };
   let s = await json<JobState>(
-    await fetch("/api/jobs", {
+    await fetch(apiUrl("jobs"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -116,14 +122,14 @@ export async function runJob(
   onUpdate(s);
   const id = s.id;
   // Tell the server to drop the job if we stop caring before it starts.
-  signal.addEventListener("abort", () => { fetch(`/api/jobs/${id}`, { method: "DELETE" }).catch(() => {}); }, { once: true });
+  signal.addEventListener("abort", () => { fetch(apiUrl(`jobs/${id}`), { method: "DELETE" }).catch(() => {}); }, { once: true });
   let delay = 150;
   while (s.status === "queued" || s.status === "running") {
     if (signal.aborted) throw new DOMException("aborted", "AbortError");
     await new Promise((res) => setTimeout(res, delay));
     delay = Math.min(600, delay * 1.3);
     if (signal.aborted) throw new DOMException("aborted", "AbortError");
-    s = await json<JobState>(await fetch(`/api/jobs/${s.id}`, { signal }));
+    s = await json<JobState>(await fetch(apiUrl(`jobs/${s.id}`), { signal }));
     onUpdate(s);
   }
   return s;
