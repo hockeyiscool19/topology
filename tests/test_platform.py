@@ -66,3 +66,23 @@ def test_external_redirects_untouched():
 
     r = TestClient(PrefixMiddleware(app), follow_redirects=False).get("/topology/x")
     assert r.headers["location"] == "https://example.com/elsewhere"
+
+
+@pytest.mark.parametrize("path", ["/health", "/topology/health", "/api/health", "/topology/api/health"])
+def test_health_defaults(client, monkeypatch, path):
+    for var in ("APP_VERSION", "APP_COMMIT", "APP_DEPLOYED_AT"):
+        monkeypatch.delenv(var, raising=False)
+    r = client.get(path)
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
+    assert r.json() == {"status": "ok", "app": "topology", "version": "dev", "commit": "", "deployedAt": ""}
+
+
+@pytest.mark.parametrize("path", ["/health", "/topology/health"])
+def test_health_reports_deploy_env(client, monkeypatch, path):
+    monkeypatch.setenv("APP_VERSION", "1.2.3")
+    monkeypatch.setenv("APP_COMMIT", "0ecb3fb16cdfc86ce2e74324953d5de83e676a5f")
+    monkeypatch.setenv("APP_DEPLOYED_AT", "2026-09-23T12:00:00Z")
+    assert client.get(path).json() == {
+        "status": "ok", "app": "topology", "version": "1.2.3",
+        "commit": "0ecb3fb16cdfc86ce2e74324953d5de83e676a5f", "deployedAt": "2026-09-23T12:00:00Z",
+    }

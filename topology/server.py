@@ -79,6 +79,17 @@ def _relative_redirects(scope: Scope, send: Send) -> Send:
     return send_relative
 
 
+def health_info() -> dict[str, str]:
+    """Liveness plus build info; scripts/deploy.sh sets the APP_* variables on the Cloud Run service."""
+    return {
+        "status": "ok",
+        "app": "topology",
+        "version": os.environ.get("APP_VERSION") or "dev",
+        "commit": os.environ.get("APP_COMMIT", ""),
+        "deployedAt": os.environ.get("APP_DEPLOYED_AT", ""),
+    }
+
+
 @dataclass
 class Job:
     id: str
@@ -164,9 +175,11 @@ def create_app() -> FastAPI:
     app.add_middleware(PrefixMiddleware, prefix=PLATFORM_PREFIX)  # outermost: runs before routing
     store = JobStore()
 
+    # /health is the platform contract; /api/health (older) answers the same for the API gateway.
+    @app.get("/health")
     @app.get("/api/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    def health() -> JSONResponse:
+        return JSONResponse(health_info(), headers={"Cache-Control": "no-store"})
 
     @lru_cache(maxsize=1)
     def _states() -> dict[str, Any]:
