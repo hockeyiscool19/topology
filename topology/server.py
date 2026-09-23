@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 import threading
@@ -23,7 +24,7 @@ from topology import boundary
 from topology.config import JobSpec
 from topology.pipeline import JobResult, run_job
 
-WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
+WEB_DIST = Path(os.environ.get("TOPOLOGY_WEB_DIST", Path(__file__).resolve().parent.parent / "web" / "dist"))
 MAX_JOBS = 24
 
 
