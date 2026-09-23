@@ -2,4 +2,9 @@ outputs/
 uv.lock
 *.tif
 __pycache__/
-cache_
+cache
+.venv/
+node_modules/
+web/dist/
+*.egg-info/
+.pytest_cache/
