@@ -69,7 +69,22 @@ The pipeline was rewritten as the `topology` package. It fixes these bugs in the
 .venv/bin/python -m pytest
 ```
 
-The tests use a synthetic terrain (no network). They check that bands are disjoint and exactly tile the region, that regions are nested, that holes are preserved, that the STL is watertight, that padding is equal on all sides, and the API job lifecycle.
+The tests use a synthetic terrain (no network). They check that bands are disjoint and exactly tile the region, that regions are nested, that holes are preserved, that the STL is watertight, that padding is equal on all sides, the API job lifecycle, and that the app is served both at `/` and under `/topology`.
+
+## Deploy
+
+Production is the Cloud Run service `topology` (project `researcher-455022`, `us-central1`), built from the `Dockerfile`. One revision serves two front doors:
+
+- `https://topology-cnc.web.app/`: Firebase Hosting site `topology-cnc` (`firebase.json`) rewrites `**` to the service, so the app is at the root.
+- `https://eisensoftware.web.app/topology/`: the platform's Hosting rewrite forwards the full `/topology/...` path. `PrefixMiddleware` in `topology/server.py` serves the app under that prefix, and the frontend only uses relative URLs (Vite `base: "./"`, `api/...`), so one build works under both.
+
+```bash
+scripts/deploy.sh                              # build from source, deploy, send all traffic
+scripts/deploy.sh --no-traffic --tag platform  # extra args go to `gcloud run deploy`
+DRY_RUN=1 scripts/deploy.sh                    # print the command only
+```
+
+`GET /health` (also `/topology/health` and `/api/health`) returns `{"status", "app", "version", "commit", "deployedAt"}` from the `APP_VERSION`, `APP_COMMIT` and `APP_DEPLOYED_AT` variables the script sets.
 
 ## Ideas
 

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
-  DEFAULT_BOARD, DEFAULT_LAYERS, fetchStates, runJob,
+  apiUrl, DEFAULT_BOARD, DEFAULT_LAYERS, fetchStates, runJob,
   type BoardSpec, type JobState, type LayerSpec, type Region,
 } from "./api";
 import Controls from "./components/Controls";
@@ -126,7 +126,7 @@ export default function App() {
         </nav>
         <a
           className={"btn-primary" + (result && !busy ? "" : " disabled")}
-          href={done ? `/api/jobs/${done.id}/download` : undefined}
+          href={done ? apiUrl(`jobs/${done.id}/download`) : undefined}
           download
         >
           <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16" /></svg>
