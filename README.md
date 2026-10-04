@@ -86,6 +86,10 @@ DRY_RUN=1 scripts/deploy.sh                    # print the command only
 
 `GET /health` (also `/topology/health` and `/api/health`) returns `{"status", "app", "version", "commit", "deployedAt"}` from the `APP_VERSION`, `APP_COMMIT` and `APP_DEPLOYED_AT` variables the script sets.
 
+## Contributing
+
+- UI work follows the eisensoftware platform's `usage-analytics` skill (hockeyiscool19/monorepo, `plugins/eisen-platform/skills/usage-analytics/SKILL.md`): literal `data-track="area.action"` names on the elements worth counting, `window.eisen?.track("area.action")` for map and 3D-canvas moments, a Privacy link to `/privacy`, and no other analytics, cookies or consent prompts.
+
 ## Ideas
 
 - Split large maps across multiple glued boards.

@@ -124,6 +124,7 @@ export default function Controls(p: Props) {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && matches[0]) {
+                window.eisen?.track("region.search"); // same name as clicking a result
                 p.onRegion({ kind: "state", ...matches[0] });
                 setQuery("");
               }
@@ -132,7 +133,8 @@ export default function Controls(p: Props) {
           {matches.length > 0 && (
             <div className="search-results glass">
               {matches.map((s) => (
-                <button key={s.usps} onClick={() => { p.onRegion({ kind: "state", ...s }); setQuery(""); }}>
+                <button key={s.usps} data-track="region.search"
+                        onClick={() => { p.onRegion({ kind: "state", ...s }); setQuery(""); }}>
                   <b>{s.usps}</b> {s.name}
                 </button>
               ))}
@@ -140,10 +142,12 @@ export default function Controls(p: Props) {
           )}
         </div>
         <div className="draw-row">
-          <button className={"chip" + (p.drawMode === "rect" ? " on" : "")} onClick={() => p.onDrawMode(p.drawMode === "rect" ? "none" : "rect")}>
+          <button className={"chip" + (p.drawMode === "rect" ? " on" : "")} data-track="draw.rect"
+                  onClick={() => p.onDrawMode(p.drawMode === "rect" ? "none" : "rect")}>
             ▭ Draw rectangle
           </button>
-          <button className={"chip" + (p.drawMode === "poly" ? " on" : "")} onClick={() => p.onDrawMode(p.drawMode === "poly" ? "none" : "poly")}>
+          <button className={"chip" + (p.drawMode === "poly" ? " on" : "")} data-track="draw.poly"
+                  onClick={() => p.onDrawMode(p.drawMode === "poly" ? "none" : "poly")}>
             ⬠ Draw polygon
           </button>
         </div>
