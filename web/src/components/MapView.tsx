@@ -150,7 +150,9 @@ export default function MapView({ region, onRegion, drawMode, onDrawDone, terrai
     map.on("click", "states-fill", (e) => {
       if (live.current.drawMode !== "none" || performance.now() - drawEndedAt.current < 400) return;
       const p = e.features?.[0]?.properties;
-      if (p) live.current.onRegion({ kind: "state", usps: p.usps, name: p.name });
+      if (!p) return;
+      window.eisen?.track("region.map"); // canvas click: no DOM element to tag, and never the state's name
+      live.current.onRegion({ kind: "state", usps: p.usps, name: p.name });
     });
 
     return () => map.remove();
@@ -199,6 +201,7 @@ export default function MapView({ region, onRegion, drawMode, onDrawDone, terrai
     if (map.getPitch() > 0) map.easeTo({ pitch: 0, bearing: 0, duration: 500 });
 
     const finish = (ring: number[][], label: string) => {
+      window.eisen?.track("draw.done"); // the name only, never the shape
       drawEndedAt.current = performance.now();
       draft.setData(EMPTY);
       const closed = [...ring, ring[0]];

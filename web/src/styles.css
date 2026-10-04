@@ -188,6 +188,8 @@ input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border: 0; bo
   box-shadow: 0 0 14px rgba(57, 208, 180, 0.7);
 }
 .error { color: #ffb4a8; font-size: 13px; }
+.privacy-link { display: inline-block; margin-top: 10px; color: var(--dim); }
+.privacy-link:hover, .privacy-link:focus-visible { color: var(--text); }
 .spinner {
   width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(57, 208, 180, 0.2); border-top-color: var(--accent);
   animation: spin 0.8s linear infinite; display: inline-block;

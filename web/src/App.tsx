@@ -64,7 +64,10 @@ export default function App() {
         fc.features.map((f) => ({ usps: f.properties!.usps, name: f.properties!.name }))
           .sort((a, b) => a.name.localeCompare(b.name)),
       ))
-      .catch(() => setError("Can't reach the Topology API. Is `topology serve` running?"));
+      .catch(() => {
+        window.eisen?.track("api.error");
+        setError("Can't reach the Topology API. Is `topology serve` running?");
+      });
   }, []);
 
   // Regenerate whenever inputs settle.
@@ -76,7 +79,12 @@ export default function App() {
     setError(null);
     runJob(params.region, params.board, params.layers, setJob, ctl.signal)
       .then((s) => {
-        if (s.status === "error") { setError(s.error ?? "Generation failed"); return; }
+        if (s.status === "error") {
+          window.eisen?.track("generate.error"); // the name only, never the message
+          setError(s.error ?? "Generation failed");
+          return;
+        }
+        window.eisen?.track("generate.done");
         setDone(s);
         setCarve(99);
         if (firstForRegion.current !== params.region) {
@@ -84,7 +92,11 @@ export default function App() {
           setTab((t) => (t === "map" ? "3d" : t));
         }
       })
-      .catch((e) => { if (e.name !== "AbortError") setError(String(e.message ?? e)); });
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        window.eisen?.track("generate.error");
+        setError(String(e.message ?? e));
+      });
     return () => ctl.abort();
   }, [params]);
 
@@ -117,17 +129,19 @@ export default function App() {
             <p>Terrain → CNC carving files</p>
           </div>
         </div>
+        {/* One button per tab so each carries a literal data-track name (usage-analytics rule 3). */}
         <nav className="tabs">
-          {([["map", "Map"], ["layers", "Toolpaths"], ["3d", "3D Preview"]] as [Tab, string][]).map(([t, label]) => (
-            <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)} disabled={t !== "map" && !result}>
-              {label}
-            </button>
-          ))}
+          <button className={tab === "map" ? "on" : ""} onClick={() => setTab("map")} data-track="tab.map">Map</button>
+          <button className={tab === "layers" ? "on" : ""} onClick={() => setTab("layers")} disabled={!result}
+                  data-track="tab.toolpaths">Toolpaths</button>
+          <button className={tab === "3d" ? "on" : ""} onClick={() => setTab("3d")} disabled={!result}
+                  data-track="tab.preview">3D Preview</button>
         </nav>
         <a
           className={"btn-primary" + (result && !busy ? "" : " disabled")}
           href={done ? apiUrl(`jobs/${done.id}/download`) : undefined}
           download
+          data-track="export.download"
         >
           <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16" /></svg>
           Download SVG + STL
@@ -159,6 +173,7 @@ export default function App() {
           ) : (
             <div className="status-row dim">Pick a region to begin — previews update live.</div>
           )}
+          <a className="privacy-link" href="/privacy">Privacy</a>
         </div>
       </aside>
 
@@ -167,7 +182,8 @@ export default function App() {
           <MapView region={region} onRegion={setRegion} drawMode={drawMode}
                    onDrawDone={() => setDrawMode("none")} terrain3d={terrain3d} />
           <div className="map-tools">
-            <button className={"chip glass" + (terrain3d ? " on" : "")} onClick={() => setTerrain3d(!terrain3d)}>
+            <button className={"chip glass" + (terrain3d ? " on" : "")} onClick={() => setTerrain3d(!terrain3d)}
+                    data-track="map.terrain">
               {terrain3d ? "◆ 3D terrain on" : "◇ 3D terrain"}
             </button>
           </div>
@@ -213,7 +229,7 @@ export default function App() {
                        style={{ ["--pct" as string]: `${(Math.min(carve, levels) / Math.max(1, levels)) * 100}%` }}
                        onChange={(e) => { setPlaying(false); setCarve(parseInt(e.target.value)); }} />
               </label>
-              <button className="icon-btn" title="Simulate carving"
+              <button className="icon-btn" title="Simulate carving" data-track="preview.carve"
                       onClick={() => { if (!playing) setCarve(0); setPlaying(!playing); }}>
                 {playing ? "❚❚" : "▶"}
               </button>
