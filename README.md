@@ -1,3 +1,7 @@
+> [!IMPORTANT]
+> **Project has moved to GitLab:** [gitlab.com/eisensoftware/eisenweb/topology](https://gitlab.com/eisensoftware/eisenweb/topology).
+> This GitHub repository is deprecated.
+
 # Topology
 
 Turn any landscape into CNC-ready carving files. Pick a US state (or draw any area on the map), set your board size and number of layers, and Topology slices real elevation data into clean, **non-overlapping pocket layers** (SVG) plus a **watertight STL**, with a live 3D preview of the carved board.
